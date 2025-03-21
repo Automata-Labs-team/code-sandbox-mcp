@@ -101,11 +101,11 @@ func runProjectInDocker(ctx context.Context, progressToken mcp.ProgressToken, cm
 		case deps.Python:
 			if depFile == "requirements.txt" {
 				containerConfig.Cmd = []string{
-					fmt.Sprintf("pip install -r %s && %s", depFile, strings.Join(cmd, " ")),
+					"/bin/sh", "-c", fmt.Sprintf(" export DEBIAN_FRONTEND=noninteractive && set -e && apt-get update && apt-get install -y apt-utils && apt-get install -y build-essential && uv venv && . .venv/bin/activate && uv pip install -r %s && %s", depFile, strings.Join(cmd, " ")),
 				}
 			} else if depFile == "pyproject.toml" || depFile == "setup.py" {
 				containerConfig.Cmd = []string{
-					fmt.Sprintf("pip install . && %s", strings.Join(cmd, " ")),
+					"/bin/sh", "-c", fmt.Sprintf("export DEBIAN_FRONTEND=noninteractive && set -e && apt-get update && apt-get install -y apt-utils &&apt-get install -y build-essential && uv venv && . .venv/bin/activate && uv pip install . && %s", strings.Join(cmd, " ")),
 				}
 			}
 		case deps.Go:
