@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/moby/moby/client"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 var CleanupEnabled bool
@@ -52,4 +53,36 @@ func CleanupContainer(ctx context.Context, containerID string, waitForExit bool,
     
     log.Printf("Successfully removed container %s\n", containerID)
     return nil
+}
+
+// CleanupContainerTool is the handler for the cleanup_container tool
+func CleanupContainerTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    containerID, ok := request.Params.Arguments["containerId"].(string)
+    if !ok || containerID == "" {
+        return mcp.NewToolResultError("Container ID is required"), nil
+    }
+
+    forceStr, _ := request.Params.Arguments["force"].(string)
+    force := forceStr == "true"
+
+    // Create Docker client
+    cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+    if err != nil {
+        return mcp.NewToolResultError(fmt.Sprintf("Failed to create Docker client: %v", err)), nil
+    }
+    defer cli.Close()
+
+    // Verify container exists
+    _, err = cli.ContainerInspect(ctx, containerID)
+    if err != nil {
+        return mcp.NewToolResultError(fmt.Sprintf("Container %s not found: %v", containerID, err)), nil
+    }
+
+    // Call the existing cleanup function
+    err = CleanupContainer(ctx, containerID, false, force, 30)
+    if err != nil {
+        return mcp.NewToolResultError(fmt.Sprintf("Failed to clean up container: %v", err)), nil
+    }
+
+    return mcp.NewToolResultText(fmt.Sprintf("Successfully cleaned up container %s", containerID)), nil
 }

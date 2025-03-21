@@ -71,16 +71,18 @@ func RunCodeSandbox(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	// Create a channel to receive the result from runInDocker
 	resultCh := make(chan struct {
 		logs string
+		container string
 		err  error
 	}, 1)
 
 	// Run the Docker container in a goroutine
 	go func() {
-		logs, err := runInDocker(ctx, cmd, config.Image, escapedCode, parsed, cleanupVar)
+		logs, containerId, err := runInDocker(ctx, cmd, config.Image, escapedCode, parsed, cleanupVar)
 		resultCh <- struct {
 			logs string
+			container string
 			err  error
-		}{logs, err}
+		}{logs, containerId, err}
 	}()
 
 	progress := 20
@@ -101,7 +103,7 @@ func RunCodeSandbox(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 			if result.err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", result.err)), nil
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("Logs: %s", result.logs)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("Container ID: %s\n\nLogs: %s", result.container, result.logs)), nil
 		default:
 			time.Sleep(2 * time.Second)
 			if progressToken != "" {
@@ -127,26 +129,26 @@ func RunCodeSandbox(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	}
 }
 
-func runInDocker(ctx context.Context, cmd []string, dockerImage string, code string, language languages.Language, cleanupVar string) (string, error) {
+func runInDocker(ctx context.Context, cmd []string, dockerImage string, code string, language languages.Language, cleanupVar string) (string, string, error) {
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create Docker client: %w", err)
+		return "", "", fmt.Errorf("failed to create Docker client: %w", err)
 	}
 	defer cli.Close()
 
 	// Pull the Docker image
 	reader, err := cli.ImagePull(ctx, dockerImage, image.PullOptions{})
 	if err != nil {
-		return "", fmt.Errorf("failed to pull Docker image %s: %w", dockerImage, err)
+		return "", "", fmt.Errorf("failed to pull Docker image %s: %w", dockerImage, err)
 	}
 	defer reader.Close()
 
 	_, err = io.Copy(io.Discard, reader)
 	if err != nil {
-		return "", fmt.Errorf("failed to copy Docker image pull output: %w", err)
+		return "", "", fmt.Errorf("failed to copy Docker image pull output: %w", err)
 	}
 
 	// Create container config
@@ -159,7 +161,7 @@ func runInDocker(ctx context.Context, cmd []string, dockerImage string, code str
 	// Create a temporary directory for the Go file
 	tmpDir, err := os.MkdirTemp("", "docker-sandbox-*")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+		return "", "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -167,7 +169,7 @@ func runInDocker(ctx context.Context, cmd []string, dockerImage string, code str
 	tmpFile := filepath.Join(tmpDir, "main."+languages.SupportedLanguages[language].FileExtension)
 	err = os.WriteFile(tmpFile, []byte(code), 0644)
 	if err != nil {
-		return "", fmt.Errorf("failed to write code to temporary file: %w", err)
+		return "", "", fmt.Errorf("failed to write code to temporary file: %w", err)
 	}
 
 	// Mount the temporary directory to /app and set it as working directory
@@ -182,11 +184,11 @@ func runInDocker(ctx context.Context, cmd []string, dockerImage string, code str
 
 	sandboxContainer, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
-		return "", fmt.Errorf("failed to create container: %w", err)
+		return "", "", fmt.Errorf("failed to create container: %w", err)
 	}
 
 	if err := cli.ContainerStart(ctx, sandboxContainer.ID, container.StartOptions{}); err != nil {
-		return "", fmt.Errorf("failed to start container: %w", err)
+		return "", sandboxContainer.ID, fmt.Errorf("failed to start container: %w", err)
 	}
 
 	// Wait for container to finish
@@ -202,14 +204,14 @@ func runInDocker(ctx context.Context, cmd []string, dockerImage string, code str
 
 	out, err := cli.ContainerLogs(ctx, sandboxContainer.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
-		return "", fmt.Errorf("failed to get container logs: %w", err)
+		return "", sandboxContainer.ID, fmt.Errorf("failed to get container logs: %w", err)
 	}
 	defer out.Close()
 
 	var b strings.Builder
 	_, err = stdcopy.StdCopy(&b, &b, out)
 	if err != nil {
-		return "", fmt.Errorf("failed to copy container output: %w", err)
+		return "", sandboxContainer.ID, fmt.Errorf("failed to copy container output: %w", err)
 	}
 
 	cleanupBool, err := strconv.ParseBool(cleanupVar)
@@ -224,5 +226,5 @@ func runInDocker(ctx context.Context, cmd []string, dockerImage string, code str
 		fmt.Printf("Cleanup feature is disabled")
 	}
 
-	return b.String(), nil
+	return b.String(), sandboxContainer.ID, nil
 }

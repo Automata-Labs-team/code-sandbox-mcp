@@ -108,6 +108,24 @@ func main() {
 		),
 	)
 
+	// Add new cleanup_container tool
+	cleanupContainerTool := mcp.NewTool("cleanup_container",
+		mcp.WithDescription(
+			"Clean up a running Docker container created by run_code or run_project tools.\n"+
+				"This tool removes the specified container and releases associated resources.\n"+
+				"Returns a confirmation message upon successful cleanup.",
+		),
+		mcp.WithString("containerId",
+			mcp.Required(),
+			mcp.Description("The ID of the container to clean up"),
+		),
+		mcp.WithString("force",
+			mcp.Required(),
+			mcp.Description("Set to 'true' to forcefully remove the container even if it's running"),
+			mcp.Enum("true", "false"),
+		),
+	)
+
 	// Register dynamic resource for container logs
 	// Dynamic resource example - Container Logs by ID
 	containerLogsTemplate := mcp.NewResourceTemplate(
@@ -121,6 +139,7 @@ func main() {
 	s.AddResourceTemplate(containerLogsTemplate, resources.GetContainerLogs)
 	s.AddTool(runCodeTool, tools.RunCodeSandbox)
 	s.AddTool(runProjectTool, tools.RunProjectSandbox)
+	s.AddTool(cleanupContainerTool, tools.CleanupContainerTool)
 
 	switch *transport {
 	case "stdio":

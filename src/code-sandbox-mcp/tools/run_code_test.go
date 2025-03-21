@@ -74,7 +74,7 @@ func TestRunInDocker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := languages.SupportedLanguages[tt.language]
-			output, err := runInDocker(ctx, config.RunCommand, config.Image, tt.code, tt.language)
+			output, _, err := runInDocker(ctx, config.RunCommand, config.Image, tt.code, tt.language)
 
 			// Check error cases
 			if (err != nil) != tt.wantErr {
