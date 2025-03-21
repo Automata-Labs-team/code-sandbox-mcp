@@ -67,9 +67,12 @@ Executes code snippets in an isolated Docker container.
 - `language` (enum, required): Programming language to use
   - Supported values: `python`, `go`, `nodejs`
   - Note: If your Python code requires external dependencies, it is recommended to use the `run_project` tool instead. Go and Node.js script dependencies are automatically installed.
+- `cleanup` (string, required): Automatically removes the container after execution when set to `true`.
+  - Supported values: `false` (default), `true`
 
 **Returns:**
 - Container execution output (stdout + stderr)
+- Created container ID
 
 **Features:**
 - Automatic dependency detection and installation
@@ -96,6 +99,24 @@ Executes a project directory in a containerized environment.
 
 **Returns:**
 - The resource URI of the container logs.
+
+#### `cleanup_container`
+Manages removal of Docker containers after execution. Automatically called by `run_code` when cleanup is enabled.
+
+**Parameters:**
+- `containerId` (string, required): Container ID from run_code/run_project response
+- `force` (string, optional): Set to 'true' to force removal of running containers
+
+**Example:**
+```json
+{
+  "tool": "cleanup_container",
+  "arguments": {
+    "containerId": "abc123",
+    "force": "true"
+  }
+}
+```
 
 **Features:**
 - Automatic dependency detection and installation
@@ -203,7 +224,9 @@ Node.js 23+ includes built-in TypeScript support:
 - Isolated execution environment using Docker containers
 - Resource limitations through Docker container constraints
 - Separate stdout and stderr streams
-- Clean container cleanup after execution
+- Automatic container cleanup after execution (enabled by default in `run_code`)
+- Manual cleanup option via `cleanup_container` tool
+- Force removal capability for stuck containers
 - Project files mounted read-only in containers
 
 ## 🛠️ Development
