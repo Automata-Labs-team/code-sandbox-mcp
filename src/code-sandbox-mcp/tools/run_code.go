@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/Automata-Labs-team/code-sandbox-mcp/languages"
 	"github.com/docker/docker/api/types/container"
@@ -38,6 +39,11 @@ func RunCodeSandbox(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	if !ok {
 		return mcp.NewToolResultError("language must be a string"), nil
 	}
+	cleanupVar, ok := request.Params.Arguments["cleanup"].(string)
+	if !ok {
+		return mcp.NewToolResultError("Error parsing cleanupVar"), nil
+	}
+
 	parsed := languages.Language(language)
 	config := languages.SupportedLanguages[languages.Language(language)]
 
@@ -70,7 +76,7 @@ func RunCodeSandbox(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 
 	// Run the Docker container in a goroutine
 	go func() {
-		logs, err := runInDocker(ctx, cmd, config.Image, escapedCode, parsed)
+		logs, err := runInDocker(ctx, cmd, config.Image, escapedCode, parsed, cleanupVar)
 		resultCh <- struct {
 			logs string
 			err  error
@@ -121,7 +127,7 @@ func RunCodeSandbox(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	}
 }
 
-func runInDocker(ctx context.Context, cmd []string, dockerImage string, code string, language languages.Language) (string, error) {
+func runInDocker(ctx context.Context, cmd []string, dockerImage string, code string, language languages.Language, cleanupVar string) (string, error) {
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -204,6 +210,18 @@ func runInDocker(ctx context.Context, cmd []string, dockerImage string, code str
 	_, err = stdcopy.StdCopy(&b, &b, out)
 	if err != nil {
 		return "", fmt.Errorf("failed to copy container output: %w", err)
+	}
+
+	cleanupBool, err := strconv.ParseBool(cleanupVar)
+	if  cleanupBool && err == nil {
+		// Clean up the created container
+		if err := CleanupContainer(ctx, sandboxContainer.ID, false, false, 10); err != nil {
+			fmt.Errorf("Failed to clean up container %s: %v\n", sandboxContainer.ID, err)
+		}
+	} else if err != nil {
+		fmt.Errorf("Failed to parse cleanupVar: %v\n", err)
+	} else {
+		fmt.Printf("Cleanup feature is disabled")
 	}
 
 	return b.String(), nil

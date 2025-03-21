@@ -64,6 +64,7 @@ func main() {
 	runCodeTool := mcp.NewTool("run_code",
 		mcp.WithDescription(
 			"Run code in a sandboxed docker container with automatic dependency detection and installation. \n"+
+				"The tool can also cleanup the container after execution. \n"+
 				"The tool will analyze your code and install required packages automatically. \n"+
 				"The supported languages are: "+GenerateEnumTag()+". \n"+
 				"Returns the execution logs of the container.",
@@ -76,6 +77,11 @@ func main() {
 			mcp.Required(),
 			mcp.Description("The programming language to use"),
 			mcp.Enum(deps.AllLanguages.ToArray()...),
+		),
+		mcp.WithString("cleanup",
+			mcp.Required(),
+			mcp.Description("Set to 'true' to enable container cleanup after run_code execution"),
+			mcp.Enum("true", "false"),
 		),
 	)
 
