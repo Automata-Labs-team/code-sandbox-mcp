@@ -30,7 +30,7 @@ var SupportedLanguages = map[Language]LanguageConfig{
 		Image:           "ghcr.io/astral-sh/uv:debian-slim",
 		DependencyFiles: []string{"requirements.txt", "pyproject.toml", "setup.py"},
 		InstallCommand:  []string{"pip", "install", "-r", "requirements.txt"},
-		RunCommand:      []string{"uvx", "run", "main.py"},
+		RunCommand:      []string{"uv", "run", "main.py"},
 		FileExtension:   "py",
 	},
 	Go: {
